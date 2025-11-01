@@ -21,7 +21,6 @@ export default class Rocket {
         this.p = p;
         this.booster = new Booster(p, x, y);
         this.starship = new Starship(p, x, y - this.booster.height / 2 - constants.STARSHIP_HEIGHT / 2);
-        this.starship.boosterAttached = true;
     }
 
     /**
@@ -37,7 +36,7 @@ export default class Rocket {
      * @returns {{booster: Booster, starship: Starship}} - The booster and starship objects.
      */
     separate() {
-        this.starship.boosterAttached = false;
+        this.booster.attached = false;
         return { booster: this.booster, starship: this.starship };
     }
 }

@@ -111,7 +111,7 @@ const sketch = (p) => {
             }
 
             // Update the physics
-            physics.update(rocket, rocket.booster, rocket.starship, gameState);
+            gameState = physics.update(rocket, rocket.booster, rocket.starship, gameState);
         }
 
         // Update the camera's focus object

@@ -23,6 +23,6 @@ describe('Rocket', () => {
 
   it('should separate the starship from the booster', () => {
     const { booster, starship } = rocket.separate();
-    expect(starship.boosterAttached).toBe(false);
+    expect(booster.attached).toBe(false);
   });
 });

@@ -43,7 +43,7 @@ export default class Vehicle {
      * @param {p5.Vector} force - The force to apply.
      */
     applyForce(force) {
-        let f = p5.Vector.div(force, this.mass);
+        let f = this.p.constructor.Vector.div(force, this.mass);
         this.acc.add(f);
     }
 
