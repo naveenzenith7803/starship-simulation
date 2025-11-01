@@ -32,7 +32,7 @@ export default class Physics {
             case 'IN_FLIGHT_STAGE2':
                 this.updateStarshipPhysics(starship);
                 this.updateBoosterPhysics(booster);
-                this.checkStarshipCollisionsAndState(starship, gameState);
+                gameState = this.checkStarshipCollisionsAndState(starship, gameState);
                 this.checkBoosterCrash(booster);
                 break;
             case 'OUT_OF_FUEL_S1':
@@ -41,10 +41,11 @@ export default class Physics {
             case 'OUT_OF_FUEL_S2':
                 this.updateStarshipPhysics(starship);
                 this.updateBoosterPhysics(booster);
-                this.checkStarshipCollisionsAndState(starship, gameState);
+                gameState = this.checkStarshipCollisionsAndState(starship, gameState);
                 this.checkBoosterCrash(booster);
                 break;
         }
+        return gameState;
     }
 
     /**
