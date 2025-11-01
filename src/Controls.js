@@ -38,8 +38,8 @@ export default class Controls {
             return 'IN_FLIGHT_STAGE2';
         }
 
-        // Toggle the autopilot if the 'A' key is pressed
-        if (this.p.keyIsDown(65) && !booster.attached && (gameState === 'IN_FLIGHT_STAGE2' || gameState === 'OUT_OF_FUEL_S2')) {
+        // Toggle the autopilot if the 'P' key is pressed
+        if (this.p.keyIsDown(80) && !booster.attached && (gameState === 'IN_FLIGHT_STAGE2' || gameState === 'OUT_OF_FUEL_S2')) {
             starship.isAutopilotActive = !starship.isAutopilotActive;
         }
 

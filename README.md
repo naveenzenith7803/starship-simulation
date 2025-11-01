@@ -72,7 +72,7 @@ This will start a web server on port 8080. You can then open your browser and na
 - **[→/D]**: Rotate Right
 - **[SPACE]**: Launch
 - **[S]**: Separate
-- **[A]**: Toggle Autopilot
+- **[P]**: Toggle Autopilot
 - **[R]**: Reset
 
 ## Game States
