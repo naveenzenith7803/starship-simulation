@@ -1,341 +1,243 @@
-Project Plan: SpaceX Starship Simulation Game
+# Starship Simulation
 
-This document outlines the complete development plan for a web-based, 2D Starship simulation game, following the AIDLC (Analysis, Ideation, Design, Low-Fidelity, Coding) development lifecycle.
+This is a 2D starship simulation game built with p5.js.
 
-A: Analysis (Requirement Gathering)
+## Project Overview
 
-This phase defines what we are building.
+This project is a complete rewrite of a previous starship simulation game. The goal of this project is to create a more robust and well-documented game with a clean and modular code structure.
 
-1. Core User Requirements
+The game simulates the launch and landing of a two-stage rocket, with a booster and a starship. The player can control the rocket manually or use the autopilot to land the starship.
 
-Game Theme: SpaceX-inspired Starship launch and landing.
+## Project Status
 
-Play Area: Vertical 2D world from Earth's surface (launch tower) to "near space."
+**All phases of the project are complete.**
 
-Key Entities:
+-   **Phase 1: Project Setup:** Completed
+-   **Phase 2: The World:** Completed
+-   **Phase 3: The Rocket:** Completed
+-   **Phase 4: Physics and Controls:** Completed
+-   **Phase 5: Staging and AI:** Completed
+-   **Phase 6: UI and Polish:** Completed
 
-Launch Tower (with background).
+## Features
 
-Two-Stage Rocket:
+-   **Realistic Physics:** The game simulates gravity and thrust, allowing for realistic orbital mechanics.
+-   **Two-Stage Rocket:** The rocket consists of a booster and a starship, which can be separated.
+-   **Manual Control:** The player can control the rocket manually with the keyboard.
+-   **Autopilot:** The starship has an autopilot that can land it safely on the landing pad.
+-   **Booster AI:** The booster has an AI that attempts to land it back on the launch pad after separation.
+-   **Telemetry:** The UI displays telemetry data, including altitude, velocity, fuel, and angle.
+-   **Minimap:** The minimap shows the position of the rocket, booster, and landing pad.
+-   **Particle Effects:** The game features particle effects for the rocket's thrust.
+-   **Collision Detection:** The game detects collisions between the rocket and the ground.
+-   **Game States:** The game has multiple states, including pre-launch, in-flight, and landed/crashed.
+
+## How to Run
+
+To run the project, you need a local web server. You can use any web server, but we recommend using `http-server`, which can be installed via npm:
+
+```bash
+npm install -g http-server
+```
 
-Booster (Stage 1)
+Once you have `http-server` installed, you can run the following command in the root of the project directory:
 
-Starship (Stage 2)
+```bash
+http-server
+```
 
-Core Mechanics:
+This will start a web server on port 8080. You can then open your browser and navigate to `http://localhost:8080` to play the game.
 
-Launch sequence.
+## File Structure
 
-Manual stage separation.
+- `index.html`: The main HTML file.
+- `main.css`: The main CSS file.
+- `src/`: The source code directory.
+    - `Game.js`: The main game class, responsible for the game loop, state management, and coordinating the other modules.
+    - `Vehicle.js`: A base class for the rocket, booster, and starship.
+    - `Rocket.js`: The class for the full-stack rocket.
+    - `Booster.js`: The class for the booster.
+    - `Starship.js`: The class for the starship.
+    - `Physics.js`: A module for the physics engine.
+    - `UI.js`: A class for the UI, including the HUD and minimap.
+    - `Camera.js`: A class for the camera, including zooming and following the target.
+    - `Particle.js`: A class for the particles.
+    - `Controls.js`: A module for handling user input.
+    - `constants.js`: A file for all the game constants.
 
-AI / Autopilot Features:
+## Controls
 
-Booster: After separation, must automatically "go and land in launch tower" (Return To Launch Site - RTLS).
+- **[↑/W]**: Thrust
+- **[←/A]**: Rotate Left
+- **[→/D]**: Rotate Right
+- **[SPACE]**: Launch
+- **[S]**: Separate
+- **[A]**: Toggle Autopilot
+- **[R]**: Reset
 
-Starship: Must have an "autopilot" toggle that, when turned on, will "automatically go and land."
+## Game States
 
-UI Features:
+- **PRE_LAUNCH**: The rocket is on the launch pad. Press **SPACE** to launch.
+- **IN_FLIGHT_STAGE1**: The rocket is in the air with the booster attached. Control the rocket with the arrow keys.
+- **OUT_OF_FUEL_S1**: The booster is out of fuel. Press **S** to separate.
+- **IN_FLIGHT_STAGE2**: The booster and starship have separated. Control the starship with the arrow keys. The booster will try to land on the landing pad automatically.
+- **OUT_OF_FUEL_S2**: The starship is out of fuel.
+- **LANDED**: The starship has landed safely.
+- **CRASHED**: The starship has crashed.
 
-Minimap.
+## Classes
 
-(Inferred) Heads-Up Display (HUD) for altitude, velocity, fuel.
+### `Game`
 
-2. Technical Stack
+The `Game` class is the main class of the game. It is responsible for:
 
-Platform: Web Browser
+-   Initializing the game objects.
+-   The main game loop.
+-   Game state management.
+-   Coordinating the other modules.
 
-Language: HTML, CSS, JavaScript (ES6+)
+#### Methods
 
-Rendering: HTML5 Canvas API (for performance and control).
+-   `constructor(p)`: Creates a new Game object.
+-   `resetGame()`: Resets the game to its initial state.
+-   `setup()`: The p5.js setup function.
+-   `draw()`: The p5.js draw function.
+-   `windowResized()`: The p5.js windowResized function.
 
-Physics: Custom-built, simplified 2D physics engine (Gravity, Thrust, Drag).
+### `Vehicle`
 
-3. Key Challenges
+The `Vehicle` class is a base class for the `Booster` and `Starship` classes. It contains the common properties and methods for all vehicles.
 
-Physics Engine: Creating a believable (not necessarily 100% accurate) physics model for thrust, gravity (decreasing with altitude), and atmospheric drag.
+#### Properties
 
-Autopilot AI: Developing robust state machines for both the Booster RTLS and the Starship auto-land. This involves pathfinding and precise thrust control (PID controller simulation).
+-   `p`: The p5.js instance.
+-   `pos`: The position of the vehicle.
+-   `vel`: The velocity of the vehicle.
+-   `acc`: The acceleration of the vehicle.
+-   `mass`: The mass of the vehicle.
+-   `fuel`: The amount of fuel.
+-   `width`: The width of the vehicle.
+-   `height`: The height of the vehicle.
+-   `angle`: The angle of the vehicle.
+-   `isThrusting`: A boolean indicating whether the vehicle is thrusting.
+-   `isRotatingLeft`: A boolean indicating whether the vehicle is rotating left.
+-   `isRotatingRight`: A boolean indicating whether the vehicle is rotating right.
+-   `crashed`: A boolean indicating whether the vehicle has crashed.
+-   `particles`: An array of particles for the thrust effect.
 
-World Management: Handling a large vertical world, including camera controls, coordinate systems, and minimap rendering.
+#### Methods
 
-State Management: Tracking the complex state of two independent rocket stages (Booster and Starship) post-separation.
+-   `constructor(p, x, y, mass, fuel, width, height)`: Creates a new Vehicle object.
+-   `applyForce(force)`: Applies a force to the vehicle.
+-   `update()`: Updates the vehicle's position and velocity.
+-   `renderParticles()`: Renders the particles.
+-   `renderRCS()`: Renders the RCS thrusters.
+-   `render()`: Renders the vehicle.
 
-I: Ideation (Brainstorming & Flow)
+### `Booster`
 
-This phase explores how the user will experience the game.
+The `Booster` class extends the `Vehicle` class and represents the booster of the rocket.
 
-1. Game Flow (User Experience)
+#### Properties
 
-Main Menu: (Simple) "Start Launch" button.
+-   `attached`: A boolean indicating whether the booster is attached to the starship.
+-   `visible`: A boolean indicating whether the booster is visible.
 
-Pre-Launch: Rocket is on the launch tower. A "Launch" button is visible. HUD is active.
+#### Methods
 
-Ascent: User clicks "Launch." Rocket ascends under full thrust. User controls can be minimal at this stage (e.g., "Toggle Autopilot" which handles ascent).
+-   `constructor(p, x, y)`: Creates a new Booster object.
+-   `runAI(landingPad)`: Runs the AI for the booster.
+-   `render()`: Renders the booster.
 
-Staging: At a specific altitude/velocity (or on user command), staging occurs.
+### `Starship`
 
-The Rocket object splits into two new objects: Booster and Starship.
+The `Starship` class extends the `Vehicle` class and represents the starship of the rocket.
 
-Split Scenario (Core Loop):
+#### Properties
 
-Booster: Immediately initiates its RTLS autopilot AI. The camera stops following the booster.
+-   `isAutopilotActive`: A boolean indicating whether the autopilot is active.
 
-Starship: The camera starts following the Starship. The user is now in manual control (or can toggle Starship's autopilot).
+#### Methods
 
-Mission Phase:
+-   `constructor(p, x, y)`: Creates a new Starship object.
+-   `runAutopilot(landingPad)`: Runs the autopilot for the starship.
+-   `render()`: Renders the starship.
 
-Booster: Flies itself back to the launch tower and attempts landing. Its success/failure is tracked.
+### `Rocket`
 
-Starship: Continues to its objective (e.g., reach a target altitude) and then can be manually flown or auto-piloted back for a landing.
+The `Rocket` class represents the entire rocket, including the booster and the starship.
 
-End State: Game ends when both stages have either landed or crashed. A summary screen shows the outcome for both.
+#### Properties
 
-2. Physics Concepts
+-   `p`: The p5.js instance.
+-   `booster`: The booster object.
+-   `starship`: The starship object.
 
-Gravity: A constant downward force, g. We can simplify this to be constant, or have it decrease slightly with altitude for more realism (g = G * (M_earth / (radius_earth + altitude)^2)).
+#### Methods
 
-Thrust: A vector force applied by the engine. Controllable by the user/AI.
+-   `constructor(p, x, y)`: Creates a new Rocket object.
+-   `render()`: Renders the rocket.
+-   `separate()`: Separates the starship from the booster.
 
-Drag: A force opposing velocity, proportional to velocity^2 and air density. Air density will decrease exponentially with altitude.
+### `Physics`
 
-Fuel: A resource that depletes when thrust is applied. mass of the rocket decreases as fuel is used.
+The `Physics` class is responsible for the physics engine of the game.
 
-Rotation: Rockets can rotate. Thrust is applied relative to the rocket's angle. (Requires torque for rotation).
+#### Methods
 
-D: Design (Detailed Specification)
+-   `constructor(p)`: Creates a new Physics object.
+-   `update(rocket, booster, starship, gameState)`: Updates the physics of the game.
+-   `updateStackPhysics(rocket, booster, starship)`: Updates the physics of the rocket stack.
+-   `updateStarshipPhysics(starship)`: Updates the physics of the starship.
+-   `updateBoosterPhysics(booster)`: Updates the physics of the booster.
+-   `checkStarshipCollisionsAndState(starship, gameState)`: Checks for collisions between the starship and the ground.
+-   `checkBoosterCrash(booster)`: Checks if the booster has crashed.
 
-This phase creates the blueprint for the game.
+### `Controls`
 
-1. Game World
+The `Controls` class is responsible for handling user input.
 
-Coordinates: 2D system. (0, 0) can be the center of the launch tower's base. Y+ is up, X+ is right.
+#### Methods
 
-World Size: Fixed width (e.g., 20,000 units) and large height (e.g., 1,000,000 units).
+-   `constructor(p)`: Creates a new Controls object.
+-   `update(rocket, booster, starship, gameState)`: Updates the controls of the game.
 
-Camera: Follows the primary player object (full stack, then Starship).
+### `UI`
 
-Background: Multi-layered parallax background:
+The `UI` class is responsible for the UI of the game, including the HUD and minimap.
 
-Layer 1: Ground, Launch Tower (static).
+#### Methods
 
-Layer 2: Clouds (slow scroll).
+-   `constructor(p, landingPad, horizontalLimits)`: Creates a new UI object.
+-   `generateStars()`: Generates the stars in the background.
+-   `drawStars()`: Draws the stars in the background.
+-   `drawGround()`: Draws the ground.
+-   `drawLandingPad()`: Draws the landing pad.
+-   `drawUI(focusObject, booster, starship, gameState)`: Draws the UI text.
+-   `drawMinimap(focusObject, booster, starship)`: Draws the minimap.
+-   `displayInstructions(message)`: Displays an instructional message.
+-   `displayEndMessage(message, messageColor)`: Displays an end message.
+-   `draw(focusObject, booster, starship, gameState)`: Draws the entire UI.
 
-Layer 3: Blue sky, fading to black.
+### `Camera`
 
-Layer 4: Space, stars (no scroll).
+The `Camera` class is responsible for the camera of the game, including zooming and following the target.
 
-2. Class Architecture (JavaScript)
+#### Methods
 
-Game: Main class. Manages the game loop, canvas, state, and all game objects.
+-   `constructor(p, focusObject)`: Creates a new Camera object.
+-   `apply()`: Applies the camera transformations.
 
-PhysicsEngine: Static class/module with methods like applyGravity(obj), applyThrust(obj), applyDrag(obj).
+### `Particle`
 
-Camera: Manages the viewport (translation) based on a target object.
+The `Particle` class represents a particle in the game. Particles are used to create the fire and smoke effects.
 
-UI: Handles rendering the HUD (altitude, velocity, fuel, minimap).
+#### Methods
 
-Vehicle (Base Class):
+-   `constructor(p, x, y, vx, vy, size, lifetime)`: Creates a new Particle object.
+-   `update()`: Updates the particle's position and lifetime.
+-   `render()`: Renders the particle.
 
-Properties: x, y, vx, vy, angle, vAngle, mass, fuel, thrust.
+## Constants
 
-Methods: update(dt), render(ctx).
-
-Rocket (Extends Vehicle):
-
-Represents the full stack (Booster + Starship).
-
-Method: separate(): Destroys itself and returns a new Booster and Starship object.
-
-Booster (Extends Vehicle):
-
-Properties: aiState (e.g., RTLS_BOOSTBACK, RTLS_ENTRY, RTLS_LANDING).
-
-Method: runAI(dt, targetX, targetY).
-
-Starship (Extends Vehicle):
-
-Properties: isAutopilotOn, aiState (e.g., ORBIT, LANDING).
-
-Method: runAI(dt, targetX, targetY).
-
-3. Autopilot AI (State Machine Logic)
-
-Booster RTLS:
-
-State: SEPARATION: Fired just after separation. Kill horizontal velocity. Pitch rocket body towards launch tower.
-
-State: BOOSTBACK_BURN: Fire engine to gain horizontal velocity back towards the launch tower. Cut off when trajectory points to the tower.
-
-State: COAST_FALL: Free-fall. Orient for re-entry (engine-first).
-
-State: ENTRY_BURN (Simplified): At a certain altitude, fire engine to slow down (a "suicide burn" logic).
-
-State: LANDING: Modulate thrust to achieve zero velocity at (target.x, target.y).
-
-Starship Auto-Land:
-
-A simplified version of the above. When toggled "On," it will:
-
-State: ORIENT: Kill velocity. Orient for landing.
-
-State: TRAVERSE: Apply thrust to move horizontally towards the landing zone.
-
-State: LANDING: Modulate thrust for a soft landing.
-
-4. UI Design
-
-HUD (Bottom Corners):
-
-Left: Altitude (m), Vertical Velocity (m/s), Horizontal Velocity (m/s).
-
-Right: Fuel (Booster), Fuel (Starship).
-
-Minimap (Top Right):
-
-A tall, thin rectangle representing the full world height.
-
-Shows: Launch Tower (icon), Booster (dot), Starship (dot).
-
-L: Low-Fidelity (Prototyping Plan)
-
-This phase validates core mechanics with simple code.
-
-Prototype 1: Physics Sandbox
-
-Goal: Test physics.
-
-Build: A single Vehicle (a rectangle) on a canvas. Implement user controls (Arrow Keys) for thrust and rotation. Apply gravity and basic drag.
-
-Test: Does it feel right? Can you lift off and "hover"?
-
-Prototype 2: Staging
-
-Goal: Test object separation.
-
-Build: Start with Prototype 1. Add a "Separate" key (e.g., 'Spacebar'). On press, replace the single Vehicle with two new Vehicle objects at the same position, giving them a slight push apart.
-
-Test: Does the separation work? Are both objects now independently physics-driven?
-
-Prototype 3: Basic AI
-
-Goal: Test autopilot logic.
-
-Build: A single Vehicle. Define a target coordinate (e.g., (100, 100)).
-
-Test: Write simple AI (if (obj.y < target.y) applyThrust()) to make the object fly to and hover at the target. This will form the basis of the landing AI.
-
-C: Coding (Implementation Plan)
-
-This is the step-by-step plan to build the final game.
-
-Phase 1: World & Game Loop
-
-Set up the HTML file (index.html) with a single <canvas> element.
-
-Create the main JavaScript file (game.js).
-
-Implement the Game class.
-
-Create the main game loop (requestAnimationFrame) that calls game.update() and game.render().
-
-Implement the Camera class.
-
-Draw the background (sky, ground).
-
-Draw the Launch Tower (a simple rectangle for now).
-
-Phase 2: The Full-Stack Rocket
-
-Create the Vehicle base class.
-
-Create the Rocket class that extends Vehicle.
-
-The Rocket.render() method should draw two rectangles (Booster + Starship) stacked.
-
-Instantiate one Rocket object on the launch tower.
-
-Implement user controls (e.g., 'W' for thrust, 'A'/'D' for rotation).
-
-Implement the PhysicsEngine with basic applyGravity and applyThrust.
-
-Call the physics methods in the Rocket.update() function.
-
-Make the Camera follow the Rocket.
-
-Phase 3: Staging & State Management
-
-Add a "Stage" key (e.g., 'Spacebar').
-
-Implement the Rocket.separate() method.
-
-When "Stage" is pressed:
-
-Call rocket.separate().
-
-This method creates and returns new Booster(...) and new Starship(...) objects, initialized at the rocket's current position/velocity.
-
-The Game class removes the Rocket from its object list and adds the new Booster and Starship.
-
-Change the Camera to follow the Starship object post-separation.
-
-Allow user controls to only affect the Starship.
-
-Phase 4: Booster RTLS (The "Hard" AI)
-
-In the Booster class, create the runAI(dt, target) method and a this.aiState property.
-
-Define the target as the launch tower's coordinates.
-
-Implement the state machine logic designed in the "Design" phase:
-
-SEPARATION: Point rocket up, fire thrusters to cancel horizontal velocity. When vx is near 0, switch to BOOSTBACK_BURN.
-
-BOOSTBACK_BURN: Calculate the angle to the target. Apply thrust at that angle. (This is complex; a simpler way is to just apply horizontal thrust towards the tower). Stop burning when the trajectory is predicted to land near the tower.
-
-COAST_FALL: No thrust. Just fall. Point engine-down.
-
-LANDING: Below a certain altitude, implement a "suicide burn." A simple PID controller is best:
-
-error = targetVelocity - currentVelocity (targetVelocity is 0).
-
-thrust = Kp * error (modulate thrust to fight gravity and slow down).
-
-Add horizontal adjustments (mini-PID for vx) to stay over the pad.
-
-Phase 5: Starship Autopilot
-
-In the Starship class, add this.isAutopilotOn = false.
-
-Add a key ('P') to toggle this boolean.
-
-In Starship.update(), if isAutopilotOn is true, call this.runAI(dt, target). Otherwise, listen for user controls.
-
-The Starship.runAI() will be a simpler version of the Booster's, as it just needs to land (not perform a boostback).
-
-LANDING: Implement the same PID landing logic as the booster.
-
-Phase 6: UI & Polish
-
-Create the UI class.
-
-In Game.render(), after drawing the world, call ui.render(ctx, player, booster).
-
-HUD: Draw text on the canvas (using fillText) for Altitude, Velocity (from starship.y, starship.vy), and Fuel.
-
-Minimap:
-
-Draw a tall rectangle in the corner.
-
-Map the world height (e.g., 1,000,000 units) to the minimap height (e.g., 300px).
-
-Calculate dotY_starship = (starship.y / WORLD_HEIGHT) * MINIMAP_HEIGHT.
-
-Draw dots for the Starship and Booster.
-
-Add particle effects for engine thrust.
-
-Add "crash" detection (if vy > MAX_LANDING_SPEED on collision with ground).
-
-Add "success" detection (if vy < MAX_LANDING_SPEED on collision with landing pad).
-
-Show a "Mission Success" or "Mission Failed" message.
+The `constants.js` file contains all the constants for the game. These constants can be tweaked to change the game's physics and behavior.

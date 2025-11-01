@@ -1,0 +1,889 @@
+// --- Constants ---
+const GRAVITY = 0.05;
+const INITIAL_LAUNCH_KICK = -1.5;
+const STARSHIP_THRUST_FORCE = 0.18;
+const STARSHIP_ROTATION_SPEED = 0.0011;
+const STARSHIP_FUEL_CONSUMPTION_MAIN = 0.08;
+const STARSHIP_FUEL_CONSUMPTION_RCS = 0.02;
+const STARSHIP_WIDTH = 20;
+const STARSHIP_HEIGHT = 60;
+const STARSHIP_START_FUEL = 800;
+const BOOSTER_THRUST_FORCE = 0.25;
+const BOOSTER_ROTATION_SPEED = 0.0008;
+const BOOSTER_FUEL_CONSUMPTION_MAIN = 0.15;
+const BOOSTER_FUEL_CONSUMPTION_RCS = 0.03;
+const BOOSTER_WIDTH = 28;
+const BOOSTER_HEIGHT = 90;
+const BOOSTER_START_FUEL = 1500;
+const MAX_LANDING_SPEED_V = 2.0;
+const MAX_LANDING_SPEED_H = 1.0;
+const MAX_LANDING_ANGLE = 0.1;
+const GROUND_HEIGHT = 50;
+const LANDING_PAD_WIDTH = 80;
+const LANDING_PAD_HEIGHT = 10;
+const EXTENDED_WORLD_FACTOR = 50;
+const NUM_STARS = 400;
+const MINIMAP_WIDTH_USER = 120;
+const MINIMAP_HEIGHT_USER = 100;
+const MINIMAP_Y_POS = 10;
+const RCS_THRUSTER_LENGTH = 10;
+const RCS_THRUSTER_WIDTH = 5;
+const HORIZONTAL_LIMIT_FACTOR = 2.5;
+// --- Autopilot Constants ---
+let AUTOPILOT_TARGET_ANGLE;
+const AUTOPILOT_ANGLE_TOLERANCE = 0.001;
+const AUTOPILOT_POS_TOLERANCE = 5;
+const AUTOPILOT_ROTATION_P_GAIN = 1.9;
+const AUTOPILOT_HORIZONTAL_P_GAIN = 0.2; // Tuned for less overshooting
+const AUTOPILOT_HORIZONTAL_D_GAIN = 0.3; // Tuned for better damping
+const AUTOPILOT_MAX_TILT = 0.35;
+const AUTOPILOT_VERTICAL_BRAKE_ALTITUDE = 550;
+const AUTOPILOT_VERTICAL_SLOWDOWN_ALTITUDE = 170;
+const AUTOPILOT_VERTICAL_TARGET_SPEED_HIGH = -9;
+const AUTOPILOT_VERTICAL_TARGET_SPEED_LOW = -MAX_LANDING_SPEED_V * 0.80;
+const AUTOPILOT_VERTICAL_P_GAIN = 0.1; // Currently unused in threshold logic
+const AUTOPILOT_VERTICAL_D_GAIN = 0.01; // Currently unused in threshold logic
+const AUTOPILOT_FINAL_APPROACH_ALTITUDE = 65;
+const AUTOPILOT_FINAL_APPROACH_MAX_TILT = 0.07;
+const AUTOPILOT_FINAL_APPROACH_ANGLE_TOLERANCE = 0.0005; // Tightened for precision
+const AUTOPILOT_FINAL_APPROACH_ROTATION_GAIN = 2.4;
+const AUTOPILOT_NOSE_DOWN_CORRECTION_ANGLE = 0.4;
+const AUTOPILOT_NOSE_DOWN_CORRECTION_VEL_Y = -0.5;
+// --- Game Variables ---
+let starship, booster, landingPad, gameState, flameHeightS1, flameHeightS2, stars;
+let isAutopilotActive = false;
+let HORIZONTAL_LIMIT_LEFT;
+let HORIZONTAL_LIMIT_RIGHT;
+let camY;
+let showAutopilotMessage = false;
+let autopilotMessageStartTime = 0;
+const AUTOPILOT_MESSAGE_DURATION = 5500;
+let zoomLevel = 1.0; // Start with no zoom
+const MIN_ZOOM = 0.2; // How far out you can zoom
+const MAX_ZOOM = 2.5; // How far in you can zoom
+const ZOOM_SENSITIVITY = 0.001; // How sensitive the zoom is to mouse movement
+function mouseWheel(event) {
+// event.delta is positive for scrolling down (zoom out), negative for scrolling up (zoom in)
+let zoomAmount = 1.0 - event.delta * ZOOM_SENSITIVITY;
+// Apply the zoom factor
+zoomLevel *= zoomAmount;
+// Constrain the zoom level to the min/max values
+zoomLevel = constrain(zoomLevel, MIN_ZOOM, MAX_ZOOM);
+// Prevent the browser window from scrolling
+return false;
+}
+// --- p5.js Setup Function ---
+function setup() {
+createCanvas(windowWidth, windowHeight);
+angleMode(RADIANS);
+rectMode(CENTER);
+textAlign(LEFT, TOP);
+textSize(16);
+AUTOPILOT_TARGET_ANGLE = -PI / 2;
+camY = height * 1.75;
+generateStars();
+resetGame();
+HORIZONTAL_LIMIT_LEFT = landingPad.x - width * HORIZONTAL_LIMIT_FACTOR;
+HORIZONTAL_LIMIT_RIGHT = landingPad.x + width * HORIZONTAL_LIMIT_FACTOR;
+}
+// --- Generate Star Positions ---
+function generateStars() {
+stars = [];
+for (let i = 0; i < NUM_STARS; i++) {
+stars.push({
+x: random(-width * 5, width * 6),
+y: random(-height * EXTENDED_WORLD_FACTOR, height * 0.8),
+size: random(1, 3.5),
+brightness: random(100, 255)
+});
+}
+}
+// --- Reset Game Function ---
+function resetGame() {
+landingPad = {
+x: width / 2,
+y: height - GROUND_HEIGHT + LANDING_PAD_HEIGHT / 2,
+w: LANDING_PAD_WIDTH,
+h: LANDING_PAD_HEIGHT
+};
+booster = {
+pos: createVector(landingPad.x, height - GROUND_HEIGHT - BOOSTER_HEIGHT / 2),
+vel: createVector(0, 0),
+acc: createVector(0, 0),
+angle: -PI / 2,
+fuel: BOOSTER_START_FUEL,
+isThrusting: false,
+attached: true,
+visible: true,
+crashed: false
+};
+starship = {
+pos: createVector(
+booster.pos.x,
+booster.pos.y - (BOOSTER_HEIGHT / 2) - (STARSHIP_HEIGHT / 2)
+),
+vel: createVector(0, 0),
+acc: createVector(0, 0),
+angle: -PI / 2,
+fuel: STARSHIP_START_FUEL,
+isThrusting: false,
+isRotatingLeft: false,
+isRotatingRight: false
+};
+gameState = 'PRE_LAUNCH';
+flameHeightS1 = 0;
+flameHeightS2 = 0;
+isAutopilotActive = false;
+HORIZONTAL_LIMIT_LEFT = landingPad.x - width * HORIZONTAL_LIMIT_FACTOR;
+HORIZONTAL_LIMIT_RIGHT = landingPad.x + width * HORIZONTAL_LIMIT_FACTOR;
+}
+// --- p5.js Draw Function (Game Loop) ---
+function draw() {
+background(10, 20, 40);
+let focusObject = booster.attached ? booster : starship;
+push(); // Start transformation state
+// 1. Move the origin to the desired anchor point on the screen
+// (Center X, 75% down Y - where the focus object should appear)
+translate(width / 2, height * 0.75);
+// 2. Apply the zoom level (scaling happens around the new origin)
+scale(zoomLevel);
+// 3. Translate the world view so the focus object is at the origin
+// (which is now effectively the screen's anchor point)
+translate(-focusObject.pos.x, -focusObject.pos.y);
+drawStars();
+drawGround();
+drawLandingPad();
+drawStarship();
+if (booster.visible) {
+drawBooster();
+}
+pop();
+if (isAutopilotActive && !booster.attached && (gameState === 'IN_FLIGHT_STAGE2' || gameState === 'OUT_OF_FUEL_S2')) {
+runAutopilot();
+} else {
+handleInput();
+}
+switch (gameState) {
+case 'PRE_LAUNCH':
+displayInstructions("Press SPACEBAR to Launch!");
+booster.pos.y = height - GROUND_HEIGHT - BOOSTER_HEIGHT / 2;
+booster.pos.x = landingPad.x;
+starship.pos.x = booster.pos.x;
+starship.pos.y = booster.pos.y - (BOOSTER_HEIGHT / 2) - (STARSHIP_HEIGHT / 2);
+booster.vel.mult(0); booster.acc.mult(0);
+starship.vel.mult(0); starship.acc.mult(0);
+booster.angle = -PI/2;
+starship.angle = booster.angle;
+if (keyIsDown(32)) {
+gameState = 'IN_FLIGHT_STAGE1';
+booster.vel.y = INITIAL_LAUNCH_KICK;
+if ((keyIsDown(UP_ARROW) || keyIsDown(87)) && booster.fuel > 0) {
+booster.isThrusting = true;
+}
+starship.vel.set(booster.vel);
+starship.acc.set(booster.acc);
+starship.angle = booster.angle;
+}
+break;
+case 'IN_FLIGHT_STAGE1':
+updateStackPhysics();
+checkBoosterStatus();
+break;
+case 'OUT_OF_FUEL_S1':
+displayInstructions("Booster Empty! Press 'S' to Separate!");
+updateStackPhysics();
+break;
+case 'IN_FLIGHT_STAGE2':
+updateStarshipPhysics();
+updateBoosterPhysics();
+checkStarshipCollisionsAndState();
+checkBoosterCrash();
+if (starship.fuel <= 0) {
+gameState = 'OUT_OF_FUEL_S2';
+starship.isThrusting = false;
+starship.isRotatingLeft = false;
+starship.isRotatingRight = false;
+isAutopilotActive = false;
+}
+break;
+case 'OUT_OF_FUEL_S2':
+displayInstructions("Starship Fuel Empty!");
+updateStarshipPhysics();
+updateBoosterPhysics();
+checkStarshipCollisionsAndState();
+checkBoosterCrash();
+isAutopilotActive = false;
+break;
+case 'LANDED':
+displayEndMessage("STARSHIP LANDED SAFELY!", color(0, 255, 0));
+starship.angle = -PI / 2;
+starship.vel.mult(0);
+starship.acc.mult(0);
+starship.isThrusting = false;
+starship.isRotatingLeft = false;
+starship.isRotatingRight = false;
+isAutopilotActive = false;
+updateBoosterPhysics();
+checkBoosterCrash();
+break;
+case 'CRASHED':
+displayEndMessage("STARSHIP CRASHED!", color(255, 0, 0));
+starship.isThrusting = false;
+starship.isRotatingLeft = false;
+starship.isRotatingRight = false;
+isAutopilotActive = false;
+updateBoosterPhysics();
+checkBoosterCrash();
+break;
+}
+drawUI();
+drawMinimapUserStyle();
+if (showAutopilotMessage) {
+// Check if the message duration has passed
+if (millis() - autopilotMessageStartTime > AUTOPILOT_MESSAGE_DURATION) {
+showAutopilotMessage = false; // Stop showing the message
+} else {
+// Display the message
+push(); // Isolate text style
+fill(0, 255, 0, 220); // Bright green, slightly transparent
+stroke(0);
+strokeWeight(2);
+textSize(48); // Large text size
+textAlign(CENTER, CENTER);
+text("AUTOPILOT ACTIVATED", width / 2, height / 2); // Center of the screen
+pop(); // Restore previous text style
+}
+}
+if (keyIsDown(82)) {
+resetGame();
+}
+}
+// --- Improved Autopilot Control Logic ---
+function runAutopilot() {
+if (starship.fuel <= 0 || gameState === 'LANDED' || gameState === 'CRASHED' || booster.attached) {
+if (isAutopilotActive) {
+isAutopilotActive = false;
+starship.isThrusting = false;
+starship.isRotatingLeft = false;
+starship.isRotatingRight = false;
+}
+return;
+}
+let dt = getDeltaTimeScale();
+if (dt === 0) return;
+starship.isThrusting = false;
+starship.isRotatingLeft = false;
+starship.isRotatingRight = false;
+let targetX = landingPad.x;
+let targetY_Ground = height - GROUND_HEIGHT;
+let strictVerticalAngle = -PI / 2;
+let currentX = starship.pos.x;
+let currentY = starship.pos.y;
+let currentAngle = starship.angle;
+let currentVSpeed = starship.vel.y;
+let currentHSpeed = starship.vel.x;
+let angleFromVertical = currentAngle - strictVerticalAngle;
+let bottomOffsetY = (STARSHIP_HEIGHT / 2) * cos(angleFromVertical);
+let shipTrueBottomY = currentY + bottomOffsetY;
+let altitude = max(0, targetY_Ground - shipTrueBottomY);
+let isFinalApproach = altitude < AUTOPILOT_FINAL_APPROACH_ALTITUDE;
+let horizontalError = targetX - currentX;
+let horizontalVelError = 0 - currentHSpeed;
+let angleErrorRaw = strictVerticalAngle - currentAngle;
+let angleError = atan2(sin(angleErrorRaw), cos(angleErrorRaw));
+let targetAngle;
+let currentRotationGain = AUTOPILOT_ROTATION_P_GAIN;
+let currentAngleTolerance = isFinalApproach ? AUTOPILOT_FINAL_APPROACH_ANGLE_TOLERANCE : AUTOPILOT_ANGLE_TOLERANCE;
+let maxTiltAllowed = AUTOPILOT_MAX_TILT;
+if (isFinalApproach) {
+targetAngle = strictVerticalAngle;
+let dampingTilt = constrain(
+horizontalVelError * AUTOPILOT_HORIZONTAL_D_GAIN * 0.8,
+-AUTOPILOT_FINAL_APPROACH_MAX_TILT,
+AUTOPILOT_FINAL_APPROACH_MAX_TILT
+);
+targetAngle += dampingTilt;
+if (abs(horizontalError) > AUTOPILOT_POS_TOLERANCE * 1.5 && abs(angleError) < AUTOPILOT_MAX_TILT * 0.6) {
+let smallPositionalTilt = constrain(
+horizontalError * AUTOPILOT_HORIZONTAL_P_GAIN * 0.05,
+-AUTOPILOT_FINAL_APPROACH_MAX_TILT * 1.2,
+AUTOPILOT_FINAL_APPROACH_MAX_TILT * 1.2
+);
+targetAngle += smallPositionalTilt;
+}
+targetAngle = constrain(targetAngle, strictVerticalAngle - AUTOPILOT_FINAL_APPROACH_MAX_TILT, strictVerticalAngle + AUTOPILOT_FINAL_APPROACH_MAX_TILT);
+currentRotationGain = AUTOPILOT_FINAL_APPROACH_ROTATION_GAIN;
+maxTiltAllowed = AUTOPILOT_FINAL_APPROACH_MAX_TILT;
+} else {
+let desiredTilt = constrain(
+horizontalError * AUTOPILOT_HORIZONTAL_P_GAIN + horizontalVelError * AUTOPILOT_HORIZONTAL_D_GAIN,
+-AUTOPILOT_MAX_TILT,
+AUTOPILOT_MAX_TILT
+);
+targetAngle = strictVerticalAngle + desiredTilt;
+}
+let rotationTargetErrorRaw = targetAngle - currentAngle;
+let rotationTargetError = atan2(sin(rotationTargetErrorRaw), cos(rotationTargetErrorRaw));
+if (abs(rotationTargetError) > currentAngleTolerance && starship.fuel > 0) {
+if (rotationTargetError * currentRotationGain < 0) {
+starship.isRotatingLeft = true;
+starship.fuel -= STARSHIP_FUEL_CONSUMPTION_RCS * dt;
+} else if (rotationTargetError * currentRotationGain > 0) {
+starship.isRotatingRight = true;
+starship.fuel -= STARSHIP_FUEL_CONSUMPTION_RCS * dt;
+}
+}
+let targetVSpeed;
+if (altitude > AUTOPILOT_VERTICAL_BRAKE_ALTITUDE) {
+targetVSpeed = AUTOPILOT_VERTICAL_TARGET_SPEED_HIGH;
+} else if (altitude > 50) {
+targetVSpeed = map(altitude, 50, AUTOPILOT_VERTICAL_BRAKE_ALTITUDE, -0.5, AUTOPILOT_VERTICAL_TARGET_SPEED_HIGH);
+} else {
+targetVSpeed = -0.5;
+}
+let targetVSpeedP5 = -targetVSpeed;
+let needsUpwardForce = false;
+if (currentVSpeed > targetVSpeedP5 + 0.1) {
+needsUpwardForce = true;
+}
+if (altitude < 50 && currentVSpeed > MAX_LANDING_SPEED_V * 1.0) {
+needsUpwardForce = true;
+}
+if (altitude < AUTOPILOT_FINAL_APPROACH_ALTITUDE && currentVSpeed > targetVSpeedP5 + 0.05) {
+needsUpwardForce = true;
+}
+if (currentVSpeed < targetVSpeedP5 - 0.5) {
+needsUpwardForce = false;
+}
+let isPointingDown = currentAngle > (strictVerticalAngle + AUTOPILOT_NOSE_DOWN_CORRECTION_ANGLE);
+let isMovingUp = currentVSpeed < AUTOPILOT_NOSE_DOWN_CORRECTION_VEL_Y;
+if (isPointingDown && isMovingUp && starship.fuel > 0) {
+needsUpwardForce = true;
+}
+let isAngleOkayForThrust = abs(angleError) < maxTiltAllowed * 1.15;
+if (needsUpwardForce && isAngleOkayForThrust && starship.fuel > 0) {
+starship.isThrusting = true;
+starship.fuel -= STARSHIP_FUEL_CONSUMPTION_MAIN * dt;
+} else {
+starship.isThrusting = false;
+}
+starship.fuel = max(0, starship.fuel);
+if (starship.fuel <= 0) {
+isAutopilotActive = false;
+starship.isThrusting = false;
+starship.isRotatingLeft = false;
+starship.isRotatingRight = false;
+if (gameState === 'IN_FLIGHT_STAGE2') {
+gameState = 'OUT_OF_FUEL_S2';
+}
+}
+}
+// --- Input Handling ---
+function handleInput() {
+booster.isThrusting = false;
+if (!isAutopilotActive) {
+starship.isThrusting = false;
+starship.isRotatingLeft = false;
+starship.isRotatingRight = false;
+}
+let dtScale = getDeltaTimeScale();
+if (keyIsDown(83) && booster.attached && (gameState === 'IN_FLIGHT_STAGE1' || gameState === 'OUT_OF_FUEL_S1')) {
+booster.attached = false;
+gameState = 'IN_FLIGHT_STAGE2';
+starship.vel.set(booster.vel);
+starship.acc.set(booster.acc);
+starship.angle = booster.angle;
+booster.isThrusting = false;
+return;
+}
+if (booster.attached && (gameState === 'IN_FLIGHT_STAGE1')) {
+if (booster.fuel > 0) {
+if (keyIsDown(UP_ARROW) || keyIsDown(87)) {
+booster.isThrusting = true;
+booster.fuel -= BOOSTER_FUEL_CONSUMPTION_MAIN * dtScale;
+}
+if (keyIsDown(LEFT_ARROW) || keyIsDown(65)) {
+booster.fuel -= BOOSTER_FUEL_CONSUMPTION_RCS * dtScale;
+}
+if (keyIsDown(RIGHT_ARROW) || keyIsDown(68)) {
+booster.fuel -= BOOSTER_FUEL_CONSUMPTION_RCS * dtScale;
+}
+}
+starship.angle = booster.angle;
+} else if (!booster.attached && !isAutopilotActive && (gameState === 'IN_FLIGHT_STAGE2')) {
+if (starship.fuel > 0) {
+if (keyIsDown(UP_ARROW) || keyIsDown(87)) {
+starship.isThrusting = true;
+starship.fuel -= STARSHIP_FUEL_CONSUMPTION_MAIN * dtScale;
+}
+if (keyIsDown(LEFT_ARROW) || keyIsDown(65)) {
+starship.isRotatingLeft = true;
+starship.fuel -= STARSHIP_FUEL_CONSUMPTION_RCS * dtScale;
+}
+if (keyIsDown(RIGHT_ARROW) || keyIsDown(68)) {
+starship.isRotatingRight = true;
+starship.fuel -= STARSHIP_FUEL_CONSUMPTION_RCS * dtScale;
+}
+}
+}
+booster.fuel = max(0, booster.fuel);
+starship.fuel = max(0, starship.fuel);
+}
+// --- Key Press Handling ---
+function keyPressed() {
+if ((key === 'a' || key === 'A') && !booster.attached && (gameState === 'IN_FLIGHT_STAGE2' || gameState === 'OUT_OF_FUEL_S2')) {
+if (starship.fuel > 0) {
+let wasActive = isAutopilotActive; // Store previous state
+isAutopilotActive = !isAutopilotActive;
+if (!isAutopilotActive) { // Turn off manual overrides if disabling AP
+starship.isThrusting = false;
+starship.isRotatingLeft = false;
+starship.isRotatingRight = false;
+} else if (!wasActive) { // Only trigger message if it was JUST turned ON
+lastAutopilotErrorV = starship.vel.y; // Initialize D term history on activation
+// ---- START NEW CODE ----
+showAutopilotMessage = true;
+autopilotMessageStartTime = millis(); // Record the start time
+// ---- END NEW CODE ----
+}
+} else {
+isAutopilotActive = false; // Cannot activate without fuel
+}
+}
+// Prevent default browser behavior for game keys
+if (key === ' ' || key === 'ArrowUp' || key === 'ArrowDown' || key === 'ArrowLeft' || key === 'ArrowRight' || key.toLowerCase() === 'a' || key.toLowerCase() === 's' || key.toLowerCase() === 'd' || key.toLowerCase() === 'w' || key.toLowerCase() === 'r') {
+return false;
+}
+}
+// --- Physics Update Functions ---
+function getDeltaTimeScale() {
+let dt = deltaTime / (1000 / 60);
+return constrain(dt, 0, 2);
+}
+function updateStackPhysics() {
+if (!booster.attached || gameState === 'PRE_LAUNCH' || gameState === 'LANDED' || gameState === 'CRASHED') return;
+let dt = getDeltaTimeScale();
+if (dt === 0) return;
+booster.acc.set(0, GRAVITY);
+if (booster.isThrusting && booster.fuel > 0) {
+let thrustVector = p5.Vector.fromAngle(booster.angle).mult(BOOSTER_THRUST_FORCE);
+booster.acc.add(thrustVector);
+}
+let rotationRateChange = 0;
+if (keyIsDown(LEFT_ARROW) || keyIsDown(65)) {
+if (booster.fuel > 0) rotationRateChange -= BOOSTER_ROTATION_SPEED * deltaTime;
+}
+if (keyIsDown(RIGHT_ARROW) || keyIsDown(68)) {
+if (booster.fuel > 0) rotationRateChange += BOOSTER_ROTATION_SPEED * deltaTime;
+}
+booster.angle += rotationRateChange;
+starship.angle = booster.angle;
+starship.acc.set(booster.acc);
+booster.vel.add(p5.Vector.mult(booster.acc, dt));
+starship.vel.set(booster.vel);
+booster.pos.add(p5.Vector.mult(booster.vel, dt));
+booster.pos.x = constrain(booster.pos.x, HORIZONTAL_LIMIT_LEFT, HORIZONTAL_LIMIT_RIGHT);
+let offsetMagnitude = -(BOOSTER_HEIGHT / 2 + STARSHIP_HEIGHT / 2);
+let offset = p5.Vector.fromAngle(booster.angle).mult(offsetMagnitude);
+starship.pos = p5.Vector.add(booster.pos, offset);
+starship.pos.x = constrain(starship.pos.x, HORIZONTAL_LIMIT_LEFT, HORIZONTAL_LIMIT_RIGHT);
+}
+function updateStarshipPhysics() {
+if (booster.attached || gameState === 'LANDED' || gameState === 'CRASHED') return;
+let dt = getDeltaTimeScale();
+if (dt === 0) return;
+starship.acc.set(0, GRAVITY);
+if (starship.isThrusting && starship.fuel > 0) {
+let thrustVector = p5.Vector.fromAngle(starship.angle).mult(STARSHIP_THRUST_FORCE);
+starship.acc.add(thrustVector);
+}
+let rotationRateChange = 0;
+if (starship.isRotatingLeft && starship.fuel > 0) {
+rotationRateChange -= STARSHIP_ROTATION_SPEED * deltaTime;
+}
+if (starship.isRotatingRight && starship.fuel > 0) {
+rotationRateChange += STARSHIP_ROTATION_SPEED * deltaTime;
+}
+starship.angle += rotationRateChange;
+starship.vel.add(p5.Vector.mult(starship.acc, dt));
+starship.pos.add(p5.Vector.mult(starship.vel, dt));
+starship.pos.x = constrain(starship.pos.x, HORIZONTAL_LIMIT_LEFT, HORIZONTAL_LIMIT_RIGHT);
+}
+function updateBoosterPhysics() {
+if (booster.attached || !booster.visible || booster.crashed) return;
+let dt = getDeltaTimeScale();
+if (dt === 0) return;
+booster.acc.set(0, GRAVITY);
+booster.vel.add(p5.Vector.mult(booster.acc, dt));
+booster.pos.add(p5.Vector.mult(booster.vel, dt));
+booster.pos.x = constrain(booster.pos.x, HORIZONTAL_LIMIT_LEFT, HORIZONTAL_LIMIT_RIGHT);
+if (booster.pos.y > height + 1000) {
+booster.visible = false;
+}
+}
+// --- Status & Collision Checks ---
+function checkBoosterStatus() {
+if (booster.attached && booster.fuel <= 0 && gameState === 'IN_FLIGHT_STAGE1') {
+gameState = 'OUT_OF_FUEL_S1';
+booster.isThrusting = false;
+}
+}
+function checkStarshipCollisionsAndState() {
+if (booster.attached || gameState === 'LANDED' || gameState === 'CRASHED') return;
+let groundLevel = height - GROUND_HEIGHT;
+let angleRad = starship.angle + PI / 2;
+let halfWidth = STARSHIP_WIDTH / 2;
+let halfHeight = STARSHIP_HEIGHT / 2;
+let cosA = cos(angleRad);
+let sinA = sin(angleRad);
+let corners = [
+createVector( -halfWidth * cosA + halfHeight * sinA, -halfWidth * sinA - halfHeight * cosA),
+createVector( halfWidth * cosA + halfHeight * sinA, halfWidth * sinA - halfHeight * cosA),
+createVector( halfWidth * cosA - halfHeight * sinA, halfWidth * sinA + halfHeight * cosA),
+createVector( -halfWidth * cosA - halfHeight * sinA, -halfWidth * sinA + halfHeight * cosA)
+];
+let lowestPointY = -Infinity;
+let contactPointsX = [];
+for (let offset of corners) {
+let worldPos = p5.Vector.add(starship.pos, offset);
+if (worldPos.y > lowestPointY) {
+lowestPointY = worldPos.y;
+contactPointsX = [worldPos.x];
+} else if (abs(worldPos.y - lowestPointY) < 0.1) {
+contactPointsX.push(worldPos.x);
+}
+}
+if (lowestPointY >= groundLevel) {
+let contactCenterX = contactPointsX.reduce((a, b) => a + b, 0) / contactPointsX.length;
+let isOnPad = abs(contactCenterX - landingPad.x) < landingPad.w / 2;
+let verticalSpeed = starship.vel.y;
+let horizontalSpeed = starship.vel.x;
+let landingAngle = starship.angle;
+let angleError = abs(landingAngle - (-PI / 2));
+angleError = min(angleError, TWO_PI - angleError);
+if (isOnPad &&
+verticalSpeed >= -0.1 &&
+verticalSpeed < MAX_LANDING_SPEED_V &&
+abs(horizontalSpeed) < MAX_LANDING_SPEED_H &&
+angleError < MAX_LANDING_ANGLE)
+{
+gameState = 'LANDED';
+isAutopilotActive = false;
+starship.pos.y -= (lowestPointY - groundLevel);
+starship.pos.x = landingPad.x;
+starship.angle = -PI / 2;
+} else {
+gameState = 'CRASHED';
+isAutopilotActive = false;
+starship.pos.y -= (lowestPointY - groundLevel);
+starship.vel.mult(0);
+starship.acc.mult(0);
+}
+}
+}
+function checkBoosterCrash() {
+if (booster.attached || !booster.visible || booster.crashed) return;
+let angleFromVertical = booster.angle - (-PI / 2);
+let halfHeight = BOOSTER_HEIGHT / 2;
+let halfWidth = BOOSTER_WIDTH / 2;
+let lowY = booster.pos.y + halfHeight * abs(cos(angleFromVertical)) + halfWidth * abs(sin(angleFromVertical));
+let groundLevel = height - GROUND_HEIGHT;
+if (lowY >= groundLevel) {
+booster.crashed = true;
+booster.vel.mult(0);
+booster.acc.mult(0);
+booster.pos.y -= (lowY - groundLevel);
+}
+}
+// --- Drawing Functions ---
+function drawStars() {
+noStroke();
+for (let star of stars) {
+fill(255, 255, 255, star.brightness);
+ellipse(star.x, star.y, star.size, star.size);
+}
+}
+function drawGround() {
+noStroke(); fill(100, 80, 50);
+let groundWidth = (HORIZONTAL_LIMIT_RIGHT - HORIZONTAL_LIMIT_LEFT) * 1.1;
+let groundCenterX = width / 2;
+rect(groundCenterX, height - GROUND_HEIGHT / 2, groundWidth, GROUND_HEIGHT);
+}
+function drawLandingPad() {
+noStroke();
+fill(150, 150, 160);
+rect(landingPad.x, landingPad.y, landingPad.w, landingPad.h);
+fill(200, 200, 0);
+rect(landingPad.x, landingPad.y, landingPad.w - 10, 2);
+rect(landingPad.x, landingPad.y, 2, landingPad.h - 10);
+}
+function drawRCSThruster(x, y, rotation) {
+push();
+translate(x, y);
+rotate(rotation);
+let rcsLen = random(RCS_THRUSTER_LENGTH * 0.5, RCS_THRUSTER_LENGTH);
+let rcsWid = random(RCS_THRUSTER_WIDTH * 0.5, RCS_THRUSTER_WIDTH);
+fill(255, 255, 200, random(150, 220));
+noStroke();
+triangle(0, 0, -rcsLen, -rcsWid / 2, -rcsLen, rcsWid / 2);
+pop();
+}
+function drawBooster() {
+if (!booster.visible) return;
+push();
+translate(booster.pos.x, booster.pos.y);
+rotate(booster.angle + PI / 2);
+fill(160, 160, 170);
+noStroke();
+rect(0, 0, BOOSTER_WIDTH, BOOSTER_HEIGHT);
+fill(175, 175, 185);
+rect(0, -BOOSTER_HEIGHT / 2 - 5, BOOSTER_WIDTH * 0.9, 10);
+if (booster.isThrusting && booster.fuel > 0 && booster.attached) {
+flameHeightS1 = lerp(flameHeightS1, random(BOOSTER_HEIGHT * 0.5, BOOSTER_HEIGHT * 1.0), 0.5);
+noStroke();
+fill(255, random(100, 200), 0, 190);
+triangle(-BOOSTER_WIDTH / 2, BOOSTER_HEIGHT / 2, BOOSTER_WIDTH / 2, BOOSTER_HEIGHT / 2, 0, BOOSTER_HEIGHT / 2 + flameHeightS1);
+fill(255, 255, random(150, 255), 240);
+triangle(-BOOSTER_WIDTH / 2 * 0.5, BOOSTER_HEIGHT / 2, BOOSTER_WIDTH / 2 * 0.5, BOOSTER_HEIGHT / 2, 0, BOOSTER_HEIGHT / 2 + flameHeightS1 * 0.7);
+} else {
+flameHeightS1 = lerp(flameHeightS1, 0, 0.2);
+}
+let canControlBooster = booster.attached && (gameState === 'IN_FLIGHT_STAGE1') && booster.fuel > 0;
+if (canControlBooster) {
+let rcsTopY = -BOOSTER_HEIGHT * 0.4;
+let rcsBottomY = BOOSTER_HEIGHT * 0.4;
+if (keyIsDown(LEFT_ARROW) || keyIsDown(65)) {
+drawRCSThruster(BOOSTER_WIDTH / 2, rcsTopY, 0);
+drawRCSThruster(BOOSTER_WIDTH / 2, rcsBottomY, 0);
+}
+if (keyIsDown(RIGHT_ARROW) || keyIsDown(68)) {
+drawRCSThruster(-BOOSTER_WIDTH / 2, rcsTopY, PI);
+drawRCSThruster(-BOOSTER_WIDTH / 2, rcsBottomY, PI);
+}
+}
+if (booster.crashed) {
+fill(80, 80, 90, 150);
+rect(0, 0, BOOSTER_WIDTH, BOOSTER_HEIGHT);
+}
+pop();
+}
+function drawStarship() {
+push();
+translate(starship.pos.x, starship.pos.y);
+rotate(starship.angle + PI / 2);
+fill(200, 200, 210);
+noStroke();
+rect(0, 0, STARSHIP_WIDTH, STARSHIP_HEIGHT);
+fill(220, 220, 230);
+triangle(
+-STARSHIP_WIDTH / 2, -STARSHIP_HEIGHT / 2,
+STARSHIP_WIDTH / 2, -STARSHIP_HEIGHT / 2,
+0, -STARSHIP_HEIGHT / 2 - STARSHIP_WIDTH * 0.8
+);
+fill(180, 180, 190);
+if (!booster.attached) {
+let finBaseY = STARSHIP_HEIGHT * 0.3;
+let finTipY = STARSHIP_HEIGHT / 2 + 5;
+let finOuterX = STARSHIP_WIDTH * 1.2;
+triangle(-STARSHIP_WIDTH / 2, finBaseY, -STARSHIP_WIDTH / 2, STARSHIP_HEIGHT / 2, -finOuterX, finTipY);
+triangle(STARSHIP_WIDTH / 2, finBaseY, STARSHIP_WIDTH / 2, STARSHIP_HEIGHT / 2, finOuterX, finTipY);
+} else {
+rect(0, STARSHIP_HEIGHT / 2, STARSHIP_WIDTH * 1.1, 5);
+}
+if (starship.isThrusting && starship.fuel > 0 && !booster.attached) {
+flameHeightS2 = lerp(flameHeightS2, random(STARSHIP_HEIGHT * 0.4, STARSHIP_HEIGHT * 0.8), 0.5);
+noStroke();
+fill(255, random(100, 200), 0, 180);
+triangle(-STARSHIP_WIDTH / 2 * 0.8, STARSHIP_HEIGHT / 2, STARSHIP_WIDTH / 2 * 0.8, STARSHIP_HEIGHT / 2, 0, STARSHIP_HEIGHT / 2 + flameHeightS2);
+fill(255, 255, random(150, 255), 230);
+triangle(-STARSHIP_WIDTH / 2 * 0.4, STARSHIP_HEIGHT / 2, STARSHIP_WIDTH / 2 * 0.4, STARSHIP_HEIGHT / 2, 0, STARSHIP_HEIGHT / 2 + flameHeightS2 * 0.6);
+} else {
+flameHeightS2 = lerp(flameHeightS2, 0, 0.2);
+}
+if (!booster.attached && starship.fuel > 0) {
+let rcsTopY = -STARSHIP_HEIGHT * 0.4;
+let rcsBottomY = STARSHIP_HEIGHT * 0.4;
+if (starship.isRotatingLeft) {
+drawRCSThruster(STARSHIP_WIDTH / 2, rcsTopY, 0);
+drawRCSThruster(STARSHIP_WIDTH / 2, rcsBottomY, 0);
+}
+if (starship.isRotatingRight) {
+drawRCSThruster(-STARSHIP_WIDTH / 2, rcsTopY, PI);
+drawRCSThruster(-STARSHIP_WIDTH / 2, rcsBottomY, PI);
+}
+}
+if (gameState === 'CRASHED') {
+fill(80, 80, 90, 150);
+rect(0, 0, STARSHIP_WIDTH, STARSHIP_HEIGHT);
+triangle(
+-STARSHIP_WIDTH / 2, -STARSHIP_HEIGHT / 2,
+STARSHIP_WIDTH / 2, -STARSHIP_HEIGHT / 2,
+0, -STARSHIP_HEIGHT / 2 - STARSHIP_WIDTH * 0.8
+);
+}
+pop();
+}
+// --- UI Drawing ---
+function drawUI() {
+fill(255); noStroke(); textSize(14); textAlign(LEFT, TOP);
+let focusObject = booster.attached ? booster : starship;
+let focusName = booster.attached ? "Booster/Stack" : "Starship";
+let uiX = 10;
+let yPos = MINIMAP_Y_POS + MINIMAP_HEIGHT_USER + 15;
+let spacing = 18;
+let altitude = 0;
+let groundY = height - GROUND_HEIGHT;
+if (focusObject) {
+let angleFromVertical = focusObject.angle - (-PI / 2);
+let objHeight = booster.attached ? (BOOSTER_HEIGHT + STARSHIP_HEIGHT) : STARSHIP_HEIGHT;
+let bottomEstY = focusObject.pos.y + objHeight / 2 * abs(cos(angleFromVertical));
+if (!booster.attached){
+let angleRad = starship.angle + PI / 2;
+let halfWidth = STARSHIP_WIDTH / 2;
+let halfHeight = STARSHIP_HEIGHT / 2;
+let cosA = cos(angleRad); let sinA = sin(angleRad);
+let cornerOffsetY1 = halfWidth * sinA + halfHeight * cosA;
+let cornerOffsetY2 = -halfWidth * sinA + halfHeight * cosA;
+bottomEstY = starship.pos.y + max(cornerOffsetY1, cornerOffsetY2);
+}
+altitude = max(0, groundY - bottomEstY);
+}
+let vSpeed = focusObject.vel.y;
+let hSpeed = focusObject.vel.x;
+let displayAngle = degrees(focusObject.angle + PI / 2);
+while (displayAngle <= -180) displayAngle += 360;
+while (displayAngle > 180) displayAngle -= 360;
+let angleErrorRad = abs(focusObject.angle - (-PI / 2));
+angleErrorRad = min(angleErrorRad, TWO_PI - angleErrorRad);
+text(`${focusName} Telemetry:`, uiX, yPos); yPos += spacing;
+text(`Altitude: ${altitude.toFixed(1)} m`, uiX, yPos); yPos += spacing;
+fill(vSpeed > MAX_LANDING_SPEED_V ? 255 : 255, vSpeed > MAX_LANDING_SPEED_V ? 0 : 255, vSpeed > MAX_LANDING_SPEED_V ? 0 : 255);
+text(`V Speed: ${vSpeed.toFixed(2)} m/s`, uiX, yPos); yPos += spacing; fill(255);
+fill(abs(hSpeed) > MAX_LANDING_SPEED_H ? 255 : 255, abs(hSpeed) > MAX_LANDING_SPEED_H ? 0 : 255, abs(hSpeed) > MAX_LANDING_SPEED_H ? 0 : 255);
+text(`H Speed: ${hSpeed.toFixed(2)} m/s`, uiX, yPos); yPos += spacing; fill(255);
+fill(angleErrorRad > MAX_LANDING_ANGLE ? 255 : 255, angleErrorRad > MAX_LANDING_ANGLE ? 0 : 255, angleErrorRad > MAX_LANDING_ANGLE ? 0 : 255);
+text(`Angle: ${displayAngle.toFixed(1)} deg`, uiX, yPos); yPos += spacing; fill(255);
+if (booster.attached) {
+text(`Booster Fuel: ${booster.fuel.toFixed(1)}`, uiX, yPos); yPos += spacing;
+} else {
+text(`Starship Fuel: ${starship.fuel.toFixed(1)}`, uiX, yPos); yPos += spacing;
+if (booster.visible && !booster.crashed) {
+text(`Booster Fuel: ${booster.fuel.toFixed(1)} (Falling)`, uiX, yPos); yPos += spacing;
+} else if (booster.crashed) {
+text(`Booster: CRASHED`, uiX, yPos); yPos += spacing;
+} else if (!booster.visible) {
+text(`Booster: Lost Signal`, uiX, yPos); yPos += spacing;
+}
+}
+text(`State: ${gameState}`, uiX, yPos); yPos+= spacing;
+if (!booster.attached) {
+let autopilotStatus = isAutopilotActive ? "ACTIVE" : "INACTIVE";
+let autopilotColor = isAutopilotActive ? color(0, 255, 0) : color(255, 180, 0);
+fill(autopilotColor);
+text(`Autopilot: ${autopilotStatus}`, uiX, yPos); yPos += spacing; fill(255);
+if ((gameState === 'IN_FLIGHT_STAGE2') && starship.fuel > 0) {
+text("Press [A] to Toggle Autopilot", uiX, yPos); yPos += spacing;
+} else if (starship.fuel <= 0 && gameState !== 'LANDED' && gameState !== 'CRASHED') {
+fill(255, 100, 100);
+text("(No Fuel for Autopilot!)", uiX, yPos); yPos += spacing; fill(255);
+}
+}
+if (booster.attached && (gameState === 'IN_FLIGHT_STAGE1' || gameState === 'OUT_OF_FUEL_S1')) {
+text("Press [S] to Separate", uiX, yPos); yPos += spacing;
+}
+fill(180); textAlign(LEFT, BOTTOM); textSize(12);
+let controlsText = "Manual: [↑/W] Thrust | [←/A][→/D] Rot | [SPACE] Launch | [S] Sep | [R] Reset";
+if (!booster.attached && (gameState === 'IN_FLIGHT_STAGE2' || gameState === 'OUT_OF_FUEL_S2' || gameState === 'LANDED' || gameState === 'CRASHED')) {
+controlsText += " | [A] Autopilot";
+}
+text(controlsText, 10, height - 10);
+textAlign(LEFT, TOP); textSize(14); fill(255);
+}
+// --- Minimap Drawing ---
+function drawMinimapUserStyle() {
+let miniMapX = width / 2 - MINIMAP_WIDTH_USER / 2;
+let miniMapY = MINIMAP_Y_POS;
+let miniMapW = MINIMAP_WIDTH_USER;
+let miniMapH = MINIMAP_HEIGHT_USER;
+push();
+stroke(255); strokeWeight(1);
+fill(0, 0, 50, 180);
+rectMode(CORNER);
+rect(miniMapX, miniMapY, miniMapW, miniMapH);
+rectMode(CENTER);
+let worldMinX = HORIZONTAL_LIMIT_LEFT - width * 0.2;
+let worldMaxX = HORIZONTAL_LIMIT_RIGHT + width * 0.2;
+let worldMinY = height - GROUND_HEIGHT - height * EXTENDED_WORLD_FACTOR * 0.3;
+let worldMaxY = height + 100;
+const mapX = (worldX) => {
+return map(worldX, worldMinX, worldMaxX, miniMapX, miniMapX + miniMapW);
+};
+const mapY = (worldY) => {
+return map(worldY, worldMinY, worldMaxY, miniMapY, miniMapY + miniMapH);
+};
+const clamp = (val, minVal, maxVal) => {
+return max(minVal, min(val, maxVal));
+};
+let groundMappedY = clamp(mapY(height - GROUND_HEIGHT), miniMapY, miniMapY + miniMapH);
+stroke(100, 80, 50); strokeWeight(2);
+line(miniMapX, groundMappedY, miniMapX + miniMapW, groundMappedY);
+let padMappedX = clamp(mapX(landingPad.x), miniMapX, miniMapX + miniMapW);
+let padMappedWidth = max(2, miniMapW * (landingPad.w / (worldMaxX - worldMinX)));
+noStroke(); fill(150, 150, 160);
+rect(padMappedX, groundMappedY - 1, padMappedWidth, 3);
+stroke(255, 0, 0, 100);
+strokeWeight(1);
+let limitLeftMappedX = clamp(mapX(HORIZONTAL_LIMIT_LEFT), miniMapX, miniMapX + miniMapW);
+let limitRightMappedX = clamp(mapX(HORIZONTAL_LIMIT_RIGHT), miniMapX, miniMapX + miniMapW);
+line(limitLeftMappedX, miniMapY, limitLeftMappedX, miniMapY + miniMapH);
+line(limitRightMappedX, miniMapY, limitRightMappedX, miniMapY + miniMapH);
+let focusObject = booster.attached ? booster : starship;
+let focusMappedX = clamp(mapX(focusObject.pos.x), miniMapX, miniMapX + miniMapW);
+let focusMappedY = clamp(mapY(focusObject.pos.y), miniMapY, miniMapY + miniMapH);
+fill(255, 0, 0);
+noStroke();
+ellipse(focusMappedX, focusMappedY, 5, 5);
+if (!booster.attached) {
+let boosterMappedX = clamp(mapX(booster.pos.x), miniMapX, miniMapX + miniMapW);
+let boosterMappedY = clamp(mapY(booster.pos.y), miniMapY, miniMapY + miniMapH);
+if (booster.crashed) {
+fill(80, 80, 90);
+ellipse(boosterMappedX, boosterMappedY, 4, 4);
+} else if (booster.visible) {
+fill(255, 165, 0);
+ellipse(boosterMappedX, boosterMappedY, 4, 4);
+}
+}
+pop();
+}
+// --- Helper Functions for Messages ---
+function displayInstructions(message) {
+push();
+fill(255, 255, 0);
+textSize(24);
+textAlign(CENTER, CENTER);
+text(message, width / 2, height / 4);
+pop();
+textSize(14); textAlign(LEFT, TOP); fill(255);
+}
+function displayEndMessage(message, messageColor) {
+push();
+fill(messageColor);
+stroke(0); strokeWeight(2);
+textSize(48);
+textAlign(CENTER, CENTER);
+text(message, width / 2, height / 3);
+fill(220);
+noStroke();
+textSize(20);
+text("Press 'R' to Reset", width / 2, height / 3 + 60);
+pop();
+textSize(14); textAlign(LEFT, TOP); fill(255);
+}
+// --- Window Resize Handling ---
+function windowResized() {
+resizeCanvas(windowWidth, windowHeight);
+generateStars();
+HORIZONTAL_LIMIT_LEFT = landingPad.x - width * HORIZONTAL_LIMIT_FACTOR;
+HORIZONTAL_LIMIT_RIGHT = landingPad.x + width * HORIZONTAL_LIMIT_FACTOR;
+}

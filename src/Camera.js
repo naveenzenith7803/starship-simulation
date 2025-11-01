@@ -1,19 +1,42 @@
+/**
+ * @file This file contains the Camera class for the Starship Simulation game.
+ * @author Gemini
+ */
+
+import { MIN_ZOOM, MAX_ZOOM, ZOOM_SENSITIVITY } from './constants.js';
+
+/**
+ * Represents the camera of the game.
+ */
 export default class Camera {
-    constructor(game) {
-        this.game = game;
-        this.x = 0;
-        this.y = 0;
+    /**
+     * Creates a new Camera object.
+     * @param {p5} p - The p5.js instance.
+     * @param {Vehicle} focusObject - The object that the camera is focused on.
+     */
+    constructor(p, focusObject) {
+        this.p = p;
+        this.focusObject = focusObject;
+        this.zoom = 1.0;
+
+        // Add a mouse wheel event listener to control the zoom
+        this.p.mouseWheel = (event) => {
+            let zoomAmount = 1.0 - event.delta * ZOOM_SENSITIVITY;
+            this.zoom *= zoomAmount;
+            this.zoom = this.p.constrain(this.zoom, MIN_ZOOM, MAX_ZOOM);
+            return false; // Prevent the page from scrolling
+        };
     }
 
-    // Apply the camera's transformation to the rendering context
-    apply(ctx) {
-        ctx.translate(-this.x, -this.y);
-    }
-
-    // Update the camera's position to follow a target
-    follow(target) {
-        // For now, we'll just center the camera on the target
-        this.x = target.x - this.game.canvas.width / 2;
-        this.y = target.y - this.game.canvas.height / 2;
+    /**
+     * Applies the camera transformations.
+     */
+    apply() {
+        // Translate the canvas to the center of the screen
+        this.p.translate(this.p.width / 2, this.p.height * 0.75);
+        // Scale the canvas to the zoom level
+        this.p.scale(this.zoom);
+        // Translate the canvas to the focus object's position
+        this.p.translate(-this.focusObject.pos.x, -this.focusObject.pos.y);
     }
 }
