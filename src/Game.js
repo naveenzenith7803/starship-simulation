@@ -1,92 +1,145 @@
+/**
+ * @file This file contains the main game logic for the Starship Simulation game.
+ * @author Gemini
+ */
+
+import * as constants from './constants.js';
 import Camera from './Camera.js';
-import PhysicsEngine from './PhysicsEngine.js';
+import UI from './UI.js';
 import Rocket from './Rocket.js';
+import Physics from './Physics.js';
+import Controls from './Controls.js';
 
-class Game {
-    constructor() {
-        this.canvas = document.getElementById('gameCanvas');
-        this.ctx = this.canvas.getContext('2d');
-        this.resize();
-        window.addEventListener('resize', this.resize.bind(this));
+/**
+ * The main p5.js sketch function.
+ * @param {p5} p - The p5.js instance.
+ */
+const sketch = (p) => {
+    // Game objects
+    let camera;
+    let ui;
+    let rocket;
+    let physics;
+    let controls;
 
-        this.camera = new Camera(this);
-        this.physicsEngine = new PhysicsEngine();
+    // World objects
+    let landingPad;
+    let horizontalLimits;
 
-        // World coordinates: Y=0 is the ground, rocket starts slightly above.
-        this.rocket = new Rocket(0, 100, 1000);
+    // Game state
+    let gameState;
+    let focusObject;
 
-        this.keys = {};
-        this.setupInput();
+    /**
+     * Resets the game to its initial state.
+     */
+    const resetGame = () => {
+        // Create the landing pad
+        landingPad = {
+            x: p.width / 2,
+            y: p.height - constants.GROUND_HEIGHT + constants.LANDING_PAD_HEIGHT / 2,
+            w: constants.LANDING_PAD_WIDTH,
+            h: constants.LANDING_PAD_HEIGHT
+        };
 
-        this.lastTime = 0;
-        this.gameLoop = this.gameLoop.bind(this);
-        this.gameLoop();
-    }
+        // Set the horizontal limits for the world
+        horizontalLimits = {
+            left: landingPad.x - p.width * constants.HORIZONTAL_LIMIT_FACTOR,
+            right: landingPad.x + p.width * constants.HORIZONTAL_LIMIT_FACTOR
+        };
 
-    setupInput() {
-        window.addEventListener('keydown', (e) => this.keys[e.code] = true);
-        window.addEventListener('keyup', (e) => this.keys[e.code] = false);
-    }
+        // Create the rocket
+        rocket = new Rocket(p, landingPad.x, p.height - constants.GROUND_HEIGHT - constants.BOOSTER_HEIGHT / 2);
 
-    resize() {
-        this.canvas.width = window.innerWidth;
-        this.canvas.height = window.innerHeight;
-    }
+        // Set the initial game state
+        gameState = 'PRE_LAUNCH';
 
-    update(dt) {
-        if (this.keys['KeyW'] || this.keys['ArrowUp']) {
-            this.rocket.thrust = 20000; // Apply thrust
+        // Set the initial focus object for the camera
+        focusObject = rocket.booster;
+    };
+
+    /**
+     * The p5.js setup function. This function is called once when the program starts.
+     */
+    p.setup = () => {
+        // Create the canvas
+        const canvas = p.createCanvas(p.windowWidth, p.windowHeight);
+        canvas.parent('canvas-container');
+
+        // Set p5.js modes
+        p.angleMode(p.RADIANS);
+        p.rectMode(p.CENTER);
+        p.textAlign(p.LEFT, p.TOP);
+        p.textSize(16);
+
+        // Reset the game
+        resetGame();
+
+        // Create the game objects
+        camera = new Camera(p, focusObject);
+        ui = new UI(p, landingPad, horizontalLimits);
+        physics = new Physics(p);
+        controls = new Controls(p);
+    };
+
+    /**
+     * The p5.js draw function. This function is called repeatedly and is used to draw the game.
+     */
+    p.draw = () => {
+        // Set the background color
+        p.background(10, 20, 40);
+
+        // Update the game state
+        if (gameState === 'PRE_LAUNCH') {
+            // If the game is in the pre-launch state, wait for the spacebar to be pressed
+            if (p.keyIsDown(32)) { // Spacebar
+                gameState = 'IN_FLIGHT_STAGE1';
+                rocket.booster.vel.y = constants.INITIAL_LAUNCH_KICK;
+            }
         } else {
-            this.rocket.thrust = 0;
+            // If the game is in flight, update the controls and physics
+            if (rocket.starship.isAutopilotActive) {
+                rocket.starship.runAutopilot(landingPad);
+            } else {
+                gameState = controls.update(rocket, rocket.booster, rocket.starship, gameState);
+            }
+
+            // If the booster is detached, run the booster AI
+            if (!rocket.booster.attached) {
+                rocket.booster.runAI(landingPad);
+                focusObject = rocket.starship;
+            }
+
+            // Update the physics
+            physics.update(rocket, rocket.booster, rocket.starship, gameState);
         }
 
-        this.physicsEngine.applyGravity(this.rocket, dt);
-        this.physicsEngine.applyThrust(this.rocket, dt);
-        this.rocket.update(dt);
-    }
+        // Update the camera's focus object
+        camera.focusObject = focusObject;
 
-    render() {
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        this.ctx.save();
+        // Apply the camera transformations
+        p.push();
+        camera.apply();
 
-        // Y-up coordinate system: translate to bottom-center of canvas
-        this.ctx.translate(this.canvas.width / 2, this.canvas.height);
-        this.ctx.scale(1, -1); // Flip the y-axis
+        // Draw the UI
+        ui.draw(focusObject, rocket.booster, rocket.starship, gameState);
 
-        // Camera follows the rocket
-        this.ctx.translate(-this.rocket.x, -this.rocket.y);
+        // Draw the rocket
+        rocket.render();
 
-        // --- Render world objects in world coordinates ---
+        // Restore the p5.js state
+        p.pop();
+    };
 
-        // Draw sky
-        this.ctx.fillStyle = '#000020'; // Dark blue space
-        this.ctx.fillRect(-this.canvas.width*10, 0, this.canvas.width*20, 100000);
+    /**
+     * The p5.js windowResized function. This function is called whenever the window is resized.
+     */
+    p.windowResized = () => {
+        p.resizeCanvas(p.windowWidth, p.windowHeight);
+        resetGame();
+        ui.generateStars();
+    };
+};
 
-        // Draw ground
-        this.ctx.fillStyle = '#228B22'; // Forest green
-        this.ctx.fillRect(-this.canvas.width*10, -100, this.canvas.width*20, 100);
-
-        // Draw launch tower
-        this.ctx.fillStyle = '#808080'; // Gray
-        this.ctx.fillRect(-25, 0, 50, 200);
-
-        this.rocket.render(this.ctx);
-
-        this.ctx.restore();
-    }
-
-    gameLoop(timestamp) {
-        if (!this.lastTime) {
-            this.lastTime = timestamp;
-        }
-        const dt = (timestamp - this.lastTime) / 1000;
-        this.lastTime = timestamp;
-
-        this.update(dt);
-        this.render();
-
-        requestAnimationFrame(this.gameLoop);
-    }
-}
-
-new Game();
+// Create a new p5.js instance
+new p5(sketch);

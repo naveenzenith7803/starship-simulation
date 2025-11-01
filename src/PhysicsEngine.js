@@ -12,6 +12,7 @@ export default class PhysicsEngine {
     applyThrust(vehicle, dt) {
         // Increase vy due to thrust. F = ma => a = F/m
         const acceleration = vehicle.thrust / vehicle.mass;
-        vehicle.vy += acceleration * dt;
+        vehicle.vx += Math.sin(vehicle.angle) * acceleration * dt;
+        vehicle.vy += Math.cos(vehicle.angle) * acceleration * dt;
     }
 }
