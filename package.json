@@ -4,7 +4,7 @@
   "description": "Project Plan: SpaceX Starship Simulation Game",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "jest",
     "start": "http-server -c-1"
   },
   "repository": {
@@ -21,5 +21,10 @@
   "homepage": "https://github.com/naveenzenith7803/starship-simulation#readme",
   "dependencies": {
     "http-server": "^14.1.1"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.28.5",
+    "@babel/preset-env": "^7.28.5",
+    "jest": "^30.2.0"
   }
 }
